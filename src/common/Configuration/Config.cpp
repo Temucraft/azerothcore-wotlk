@@ -734,6 +734,10 @@ void ConfigMgr::Configure(std::string const& initFileName, std::vector<std::stri
             if (!itr.empty())
                 _additonalFiles.emplace_back(itr);
         }
+
+        // Temucraft: mod-temucraft.conf loads last, so its server and module settings win over the other files
+        std::stable_partition(_additonalFiles.begin(), _additonalFiles.end(),
+            [](std::string const& file) { return file != "mod-temucraft.conf"; });
     }
 }
 
