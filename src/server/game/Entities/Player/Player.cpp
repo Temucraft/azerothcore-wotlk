@@ -951,7 +951,7 @@ void Player::HandleDrowning(uint32 time_diff)
     }
 
     // In dark water
-    if (m_MirrorTimerFlags & UNDERWATER_INDARKWATER)
+    if ((m_MirrorTimerFlags & UNDERWATER_INDARKWATER) && !sWorld->getBoolConfig(CONFIG_DISABLE_FATIGUE))
     {
         // Fatigue timer not activated - activate it
         if (m_MirrorTimer[FATIGUE_TIMER] == DISABLED_MIRROR_TIMER)
