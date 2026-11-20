@@ -1888,12 +1888,9 @@ void ObjectMgr::LoadPlayerShapeshiftModels()
 
 uint32 ObjectMgr::GetModelForShapeshift(ShapeshiftForm form, Player* player) const
 {
-    uint8 customizationID;
-
-    if (player->GetTeamId() == TEAM_ALLIANCE)
-        customizationID = player->GetByteValue(PLAYER_BYTES, 3); // Use Hair Color
-    else
-        customizationID = player->GetByteValue(PLAYER_BYTES, 0); // Use Skin Color
+    uint8 const customizationID = sRaceMgr->UsesSkinColorForms(player->getRace())
+        ? player->GetByteValue(PLAYER_BYTES, 0)  // Use Skin Color
+        : player->GetByteValue(PLAYER_BYTES, 3); // Use Hair Color
 
     // getGender() tracks the active display model; real gender lives in PLAYER_BYTES_3
     uint8 gender = player->GetByteValue(PLAYER_BYTES_3, PLAYER_BYTES_3_OFFSET_GENDER);
@@ -4868,7 +4865,7 @@ void ObjectMgr::LoadPlayerInfo()
                     continue;
 
                 // skip expansion races if not playing with expansion
-                if (sWorld->getIntConfig(CONFIG_EXPANSION) < EXPANSION_THE_BURNING_CRUSADE && (race == RACE_BLOODELF || race == RACE_DRAENEI))
+                if (sChrRacesStore.LookupEntry(race)->expansion > sWorld->getIntConfig(CONFIG_EXPANSION))
                     continue;
 
                 // skip expansion classes if not playing with expansion

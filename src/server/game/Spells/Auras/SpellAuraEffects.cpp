@@ -15,6 +15,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "RaceMgr.h"
 #include "SpellAuraEffects.h"
 #include "AreaDefines.h"
 #include "BattlefieldMgr.h"
@@ -2331,7 +2332,7 @@ void AuraEffect::HandleAuraTransform(AuraApplication const* aurApp, uint8 mode, 
                             if (!target->IsPlayer())
                                 return;
 
-                            switch (target->getRace())
+                            switch (sRaceMgr->GetLookalikeRace(target->getRace()))
                             {
                                 // Blood Elf
                                 case RACE_BLOODELF:
@@ -2390,7 +2391,7 @@ void AuraEffect::HandleAuraTransform(AuraApplication const* aurApp, uint8 mode, 
                             if (!target->IsPlayer())
                                 return;
 
-                            switch (target->getRace())
+                            switch (sRaceMgr->GetLookalikeRace(target->getRace()))
                             {
                                 // Blood Elf
                                 case RACE_BLOODELF:
@@ -2449,7 +2450,7 @@ void AuraEffect::HandleAuraTransform(AuraApplication const* aurApp, uint8 mode, 
                     // Gossip NPC Appearance - Brewfest
                     case 65511:
                         {
-                            switch (target->GetDisplayRace())
+                            switch (DisplayRace(sRaceMgr->GetKinRace(uint8(target->GetDisplayRace()))))
                             {
                                 case DisplayRace::BloodElf:
                                     if (urand(0, 1))
@@ -2537,7 +2538,7 @@ void AuraEffect::HandleAuraTransform(AuraApplication const* aurApp, uint8 mode, 
                     // Gossip NPC Appearance - Winter Veil
                     case 65522:
                         {
-                            switch (target->GetDisplayRace())
+                            switch (DisplayRace(sRaceMgr->GetKinRace(uint8(target->GetDisplayRace()))))
                             {
                                 case DisplayRace::BloodElf:
                                     target->SetDisplayId(target->getGender() == GENDER_MALE ? 18793 : 18785);
@@ -2579,7 +2580,7 @@ void AuraEffect::HandleAuraTransform(AuraApplication const* aurApp, uint8 mode, 
                     // Gossip NPC Appearance - Default
                     case 65523:
                         {
-                            switch (target->GetDisplayRace())
+                            switch (DisplayRace(sRaceMgr->GetKinRace(uint8(target->GetDisplayRace()))))
                             {
                                 case DisplayRace::BloodElf:
                                     target->SetDisplayId(target->getGender() == GENDER_MALE ? 19170 : 19169);
@@ -2621,7 +2622,7 @@ void AuraEffect::HandleAuraTransform(AuraApplication const* aurApp, uint8 mode, 
                     // Gossip NPC Appearance - Lunar Festival
                     case 65524:
                         {
-                            switch (target->GetDisplayRace())
+                            switch (DisplayRace(sRaceMgr->GetKinRace(uint8(target->GetDisplayRace()))))
                             {
                                 case DisplayRace::BloodElf:
                                     target->SetDisplayId(target->getGender() == GENDER_MALE ? 18841 : 18840);
@@ -2663,7 +2664,7 @@ void AuraEffect::HandleAuraTransform(AuraApplication const* aurApp, uint8 mode, 
                     // Gossip NPC Appearance - Hallow's End
                     case 65525:
                         {
-                            switch (target->GetDisplayRace())
+                            switch (DisplayRace(sRaceMgr->GetKinRace(uint8(target->GetDisplayRace()))))
                             {
                                 case DisplayRace::BloodElf:
                                     target->SetDisplayId(target->getGender() == GENDER_MALE ? 22361 : 22360);
@@ -2705,7 +2706,7 @@ void AuraEffect::HandleAuraTransform(AuraApplication const* aurApp, uint8 mode, 
                     // Gossip NPC Appearance - Midsummer
                     case 65526:
                         {
-                            switch (target->GetDisplayRace())
+                            switch (DisplayRace(sRaceMgr->GetKinRace(uint8(target->GetDisplayRace()))))
                             {
                                 case DisplayRace::BloodElf:
                                     target->SetDisplayId(target->getGender() == GENDER_MALE ? 21086 : 21085);
@@ -2747,7 +2748,7 @@ void AuraEffect::HandleAuraTransform(AuraApplication const* aurApp, uint8 mode, 
                     // Gossip NPC Appearance - Spirit of Competition
                     case 65527:
                         {
-                            switch (target->GetDisplayRace())
+                            switch (DisplayRace(sRaceMgr->GetKinRace(uint8(target->GetDisplayRace()))))
                             {
                                 case DisplayRace::BloodElf:
                                     target->SetDisplayId(target->getGender() == GENDER_MALE ? 24508 : 24519);
@@ -2789,7 +2790,7 @@ void AuraEffect::HandleAuraTransform(AuraApplication const* aurApp, uint8 mode, 
                     // Gossip NPC Appearance - Pirates' Day
                     case 65528:
                         {
-                            switch (target->GetDisplayRace())
+                            switch (DisplayRace(sRaceMgr->GetKinRace(uint8(target->GetDisplayRace()))))
                             {
                                 case DisplayRace::BloodElf:
                                     target->SetDisplayId(target->getGender() == GENDER_MALE ? 25032 : 25043);

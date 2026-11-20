@@ -17,6 +17,7 @@
 
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "RaceMgr.h"
 #include "StringConvert.h"
 #include "Tokenize.h"
 
@@ -34,7 +35,7 @@ void PlayerTaxi::InitTaxiNodesForLevel(uint32 race, uint32 chrClass, uint8 level
     }
 
     // race specific initial known nodes: capital and taxi hub masks
-    switch (race)
+    switch (sRaceMgr->GetHomeRace(race))
     {
         case RACE_HUMAN:
             SetTaximaskNode(2);
