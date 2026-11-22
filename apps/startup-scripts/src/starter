@@ -283,6 +283,7 @@ EOF
             gdb -x "$GDB_FILE" --batch "$EXECPATH"
         fi
     fi
+    gdb_exit=$?  # Temucraft: hand gdb's exit code to the restarter (the cleanup below always returns 0)
 
 
     # clean up temporary GDB file if it exists
@@ -290,6 +291,7 @@ EOF
         # Clean up temporary GDB file
         rm -f "$GDB_TEMP_FILE"
     fi
+    exit "$gdb_exit"
 else
     echo "Starting $BINFILE without GDB"
     # Determine if PM2 is active
