@@ -1009,6 +1009,8 @@ public:
         }
 
         // If gmRealmID is -1, delete access on every realm, else on the requested one and any all-realms row
+        // Temucraft: one transaction, so the delete can't run after the insert on another worker thread
+        LoginDatabaseTransaction trans = LoginDatabase.BeginTransaction();
         LoginDatabasePreparedStatement* stmt;
 
         if (gmRealmID == -1)
@@ -1023,7 +1025,7 @@ public:
             stmt->SetData(1, gmRealmID);
         }
 
-        LoginDatabase.Execute(stmt);
+        trans->Append(stmt);
 
         if (gm != 0)
         {
@@ -1033,8 +1035,10 @@ public:
             stmt->SetData(1, uint8(gm));
             stmt->SetData(2, gmRealmID);
 
-            LoginDatabase.Execute(stmt);
+            trans->Append(stmt);
         }
+
+        LoginDatabase.CommitTransaction(trans);
 
         handler->PSendSysMessage(LANG_YOU_CHANGE_SECURITY, targetAccountName, gm);
         return true;
