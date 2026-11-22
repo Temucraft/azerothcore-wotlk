@@ -1304,13 +1304,13 @@ bool LootTemplate::LootGroup::HasQuestDrop(LootTemplateMap const& store) const
         LootStoreItem* item = *i;
         if (item->reference) // References
         {
-            LootTemplateMap::const_iterator Referenced = store.find(std::abs(item->reference));
-            if (Referenced == store.end())
+            LootTemplate const* Referenced = LootTemplates_Reference.GetLootFor(std::abs(item->reference)); // Temucraft: from the reference store
+            if (!Referenced)
             {
                 continue; // Error message [should be] already printed at loading stage
             }
 
-            if (Referenced->second->HasQuestDrop(store))
+            if (Referenced->HasQuestDrop(store))
             {
                 return true;
             }
@@ -1326,13 +1326,13 @@ bool LootTemplate::LootGroup::HasQuestDrop(LootTemplateMap const& store) const
         LootStoreItem* item = *i;
         if (item->reference) // References
         {
-            LootTemplateMap::const_iterator Referenced = store.find(std::abs(item->reference));
-            if (Referenced == store.end())
+            LootTemplate const* Referenced = LootTemplates_Reference.GetLootFor(std::abs(item->reference)); // Temucraft: from the reference store
+            if (!Referenced)
             {
                 continue; // Error message [should be] already printed at loading stage
             }
 
-            if (Referenced->second->HasQuestDrop(store))
+            if (Referenced->HasQuestDrop(store))
             {
                 return true;
             }
@@ -1354,13 +1354,13 @@ bool LootTemplate::LootGroup::HasQuestDropForPlayer(Player const* player, LootTe
         LootStoreItem* item = *i;
         if (item->reference)                        // References processing
         {
-            LootTemplateMap::const_iterator Referenced = store.find(std::abs(item->reference));
-            if (Referenced == store.end())
+            LootTemplate const* Referenced = LootTemplates_Reference.GetLootFor(std::abs(item->reference)); // Temucraft: from the reference store
+            if (!Referenced)
             {
                 continue;                                   // Error message already printed at loading stage
             }
 
-            if (Referenced->second->HasQuestDropForPlayer(store, player))
+            if (Referenced->HasQuestDropForPlayer(store, player))
             {
                 return true;
             }
@@ -1376,13 +1376,13 @@ bool LootTemplate::LootGroup::HasQuestDropForPlayer(Player const* player, LootTe
         LootStoreItem* item = *i;
         if (item->reference)                        // References processing
         {
-            LootTemplateMap::const_iterator Referenced = store.find(std::abs(item->reference));
-            if (Referenced == store.end())
+            LootTemplate const* Referenced = LootTemplates_Reference.GetLootFor(std::abs(item->reference)); // Temucraft: from the reference store
+            if (!Referenced)
             {
                 continue;                                   // Error message already printed at loading stage
             }
 
-            if (Referenced->second->HasQuestDropForPlayer(store, player))
+            if (Referenced->HasQuestDropForPlayer(store, player))
             {
                 return true;
             }
@@ -1743,11 +1743,12 @@ bool LootTemplate::HasQuestDrop(LootTemplateMap const& store) const
         LootStoreItem* item = *i;
         if (item->reference)                                // References
         {
-            LootTemplateMap::const_iterator Referenced = store.find(std::abs(item->reference));
-            if (Referenced == store.end())
+            // Temucraft: references always live in reference_loot_template (looking them up in this store loops when ids overlap)
+            LootTemplate const* Referenced = LootTemplates_Reference.GetLootFor(std::abs(item->reference));
+            if (!Referenced)
                 continue;                                   // Error message [should be] already printed at loading stage
 
-            if (Referenced->second->HasQuestDrop(store))
+            if (Referenced->HasQuestDrop(store))
                 return true;
         }
         else if (item->needs_quest)
@@ -1778,10 +1779,11 @@ bool LootTemplate::HasQuestDropForPlayer(LootTemplateMap const& store, Player co
         LootStoreItem* item = *i;
         if (item->reference)                                // References processing
         {
-            LootTemplateMap::const_iterator Referenced = store.find(std::abs(item->reference));
-            if (Referenced == store.end())
+            // Temucraft: references always live in reference_loot_template (looking them up in this store loops when ids overlap)
+            LootTemplate const* Referenced = LootTemplates_Reference.GetLootFor(std::abs(item->reference));
+            if (!Referenced)
                 continue;                                   // Error message already printed at loading stage
-            if (Referenced->second->HasQuestDropForPlayer(store, player))
+            if (Referenced->HasQuestDropForPlayer(store, player))
                 return true;
         }
         else if (player->HasQuestForItem(item->itemid))
