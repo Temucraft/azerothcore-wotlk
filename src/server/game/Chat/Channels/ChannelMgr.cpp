@@ -120,6 +120,7 @@ void ChannelMgr::LoadChannels()
 
 Channel* ChannelMgr::GetJoinChannel(std::string const& name, uint32 channelId)
 {
+    std::lock_guard<std::mutex> guard(_lock);   // Temucraft: map threads and the world thread both look up channels
     std::wstring wname;
     Utf8toWStr(name, wname);
     wstrToLower(wname);
@@ -138,6 +139,7 @@ Channel* ChannelMgr::GetJoinChannel(std::string const& name, uint32 channelId)
 
 Channel* ChannelMgr::GetChannel(std::string const& name, Player* player, bool pkt)
 {
+    std::lock_guard<std::mutex> guard(_lock);   // Temucraft: map threads and the world thread both look up channels
     std::wstring wname;
     Utf8toWStr(name, wname);
     wstrToLower(wname);

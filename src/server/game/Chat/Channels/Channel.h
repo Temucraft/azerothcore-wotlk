@@ -20,6 +20,7 @@
 
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include <mutex>
 #include <string>
 
 class Player;
@@ -145,8 +146,8 @@ class Channel
     struct PlayerInfo
     {
         ObjectGuid player;
-        uint8 flags;
-        Player* plrPtr; // pussywizard
+        uint8 flags{0};
+        Player* plrPtr{nullptr}; // pussywizard
 
         [[nodiscard]] bool HasFlag(uint8 flag) const { return flags & flag; }
         void SetFlag(uint8 flag) { if (!HasFlag(flag)) flags |= flag; }
@@ -184,7 +185,7 @@ public:
     [[nodiscard]] bool IsLFG() const { return HasFlag(CHANNEL_FLAG_LFG); }
     [[nodiscard]] std::string const& GetPassword() const { return _password; }
     void SetPassword(std::string const& npassword) { _password = npassword; }
-    [[nodiscard]] uint32 GetNumPlayers() const { return playersStore.size(); }
+    [[nodiscard]] uint32 GetNumPlayers() const { std::lock_guard<std::recursive_mutex> guard(_lock); return playersStore.size(); }
     [[nodiscard]] uint8 GetFlags() const { return _flags; }
     [[nodiscard]] bool HasFlag(uint8 flag) const { return _flags & flag; }
 
@@ -269,7 +270,7 @@ private:
 
     bool ShouldAnnouncePlayer(Player const* player) const;
 
-    [[nodiscard]] bool IsOn(ObjectGuid who) const { return playersStore.find(who) != playersStore.end(); }
+    [[nodiscard]] bool IsOn(ObjectGuid who) const { std::lock_guard<std::recursive_mutex> guard(_lock); return playersStore.find(who) != playersStore.end(); }
     [[nodiscard]] bool IsBanned(ObjectGuid guid) const;
 
     void UpdateChannelInDB() const;
@@ -285,7 +286,12 @@ private:
 
     void SetModerator(ObjectGuid guid, bool set)
     {
-        PlayerInfo& pinfo = playersStore[guid];
+        std::lock_guard<std::recursive_mutex> guard(_lock);
+        // Temucraft: find, not [], which added an empty member with no player for a guid that isn't in the channel
+        PlayerContainer::iterator itr = playersStore.find(guid);
+        if (itr == playersStore.end())
+            return;
+        PlayerInfo& pinfo = itr->second;
         if (pinfo.IsModerator() != set)
         {
             uint8 oldFlag = pinfo.flags;
@@ -301,7 +307,11 @@ private:
 
     void SetMute(ObjectGuid guid, bool set)
     {
-        PlayerInfo& pinfo = playersStore[guid];
+        std::lock_guard<std::recursive_mutex> guard(_lock);
+        PlayerContainer::iterator itr = playersStore.find(guid);
+        if (itr == playersStore.end())
+            return;
+        PlayerInfo& pinfo = itr->second;
         if (pinfo.IsMuted() != set)
         {
             uint8 oldFlag = pinfo.flags;
@@ -312,6 +322,8 @@ private:
             SendToAll(&data);
         }
     }
+
+    mutable std::recursive_mutex _lock;
 
     typedef std::unordered_map<ObjectGuid, PlayerInfo> PlayerContainer;
     typedef std::unordered_map<ObjectGuid, uint32> BannedContainer;

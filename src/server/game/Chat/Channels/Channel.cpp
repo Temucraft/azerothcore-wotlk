@@ -157,6 +157,7 @@ void Channel::CleanOldChannelsInDB()
 
 void Channel::JoinChannel(Player* player, std::string const& pass)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     ObjectGuid guid = player->GetGUID();
     if (IsOn(guid))
     {
@@ -249,6 +250,7 @@ void Channel::JoinChannel(Player* player, std::string const& pass)
 
 void Channel::LeaveChannel(Player* player, bool send)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     ObjectGuid guid = player->GetGUID();
     if (!IsOn(guid))
     {
@@ -315,6 +317,7 @@ void Channel::LeaveChannel(Player* player, bool send)
 
 void Channel::KickOrBan(Player const* player, std::string const& badname, bool ban)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     ObjectGuid good = player->GetGUID();
 
     if (!IsOn(good))
@@ -467,6 +470,7 @@ void Channel::KickOrBan(Player const* player, std::string const& badname, bool b
 
 void Channel::UnBan(Player const* player, std::string const& badname)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     ObjectGuid good = player->GetGUID();
 
     if (!IsOn(good))
@@ -526,6 +530,7 @@ void Channel::UnBan(Player const* player, std::string const& badname)
 
 void Channel::UnBan(ObjectGuid guid)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     if (!IsBanned(guid))
         return;
     bannedStore.erase(guid);
@@ -534,6 +539,7 @@ void Channel::UnBan(ObjectGuid guid)
 
 void Channel::Password(Player const* player, std::string const& pass)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     ObjectGuid guid = player->GetGUID();
 
     ChatHandler chat(player->GetSession());
@@ -572,6 +578,7 @@ void Channel::Password(Player const* player, std::string const& pass)
 
 void Channel::SetMode(Player const* player, std::string const& p2n, bool mod, bool set)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     ObjectGuid guid = player->GetGUID();
 
     if (!IsOn(guid))
@@ -642,6 +649,7 @@ void Channel::SetMode(Player const* player, std::string const& p2n, bool mod, bo
 
 void Channel::SetOwner(Player const* player, std::string const& newname)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     ObjectGuid guid = player->GetGUID();
 
     if (!IsOn(guid))
@@ -678,6 +686,7 @@ void Channel::SetOwner(Player const* player, std::string const& newname)
 
 void Channel::SendWhoOwner(ObjectGuid guid)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     WorldPacket data;
     if (IsOn(guid))
         MakeChannelOwner(&data);
@@ -688,6 +697,7 @@ void Channel::SendWhoOwner(ObjectGuid guid)
 
 void Channel::List(Player const* player)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     ObjectGuid guid = player->GetGUID();
 
     if (!IsOn(guid))
@@ -729,6 +739,7 @@ void Channel::List(Player const* player)
 
 void Channel::Announce(Player const* player)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     ObjectGuid guid = player->GetGUID();
 
     if (!IsOn(guid))
@@ -769,6 +780,7 @@ void Channel::Announce(Player const* player)
 
 void Channel::Say(ObjectGuid guid, std::string const& what, uint32 lang)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     if (what.empty())
         return;
 
@@ -810,6 +822,7 @@ void Channel::Say(ObjectGuid guid, std::string const& what, uint32 lang)
 
 void Channel::Invite(Player const* player, std::string const& newname)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     ObjectGuid guid = player->GetGUID();
 
     if (!IsOn(guid))
@@ -868,6 +881,7 @@ void Channel::Invite(Player const* player, std::string const& newname)
 
 void Channel::SetOwner(ObjectGuid guid, bool exclaim)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     if (_ownerGUID)
     {
         // [] will re-add player after it possible removed
@@ -912,26 +926,30 @@ void Channel::SetOwner(ObjectGuid guid, bool exclaim)
 
 void Channel::SendToAll(WorldPacket* data, ObjectGuid guid)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     for (PlayerContainer::const_iterator i = playersStore.begin(); i != playersStore.end(); ++i)
-        if (!guid || !i->second.plrPtr->GetSocial()->HasIgnore(guid))
+        if (i->second.plrPtr && (!guid || !i->second.plrPtr->GetSocial()->HasIgnore(guid)))
             i->second.plrPtr->SendDirectMessage(data);
 }
 
 void Channel::SendToAllButOne(WorldPacket* data, ObjectGuid who)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     for (PlayerContainer::const_iterator i = playersStore.begin(); i != playersStore.end(); ++i)
-        if (i->first != who)
+        if (i->first != who && i->second.plrPtr)
             i->second.plrPtr->SendDirectMessage(data);
 }
 
 void Channel::SendToOne(WorldPacket* data, ObjectGuid who)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     if (Player* player = ObjectAccessor::FindConnectedPlayer(who))
         player->SendDirectMessage(data);
 }
 
 void Channel::SendToAllWatching(WorldPacket* data)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     for (PlayersWatchingContainer::const_iterator i = playersWatchingStore.begin(); i != playersWatchingStore.end(); ++i)
         (*i)->SendDirectMessage(data);
 }
@@ -1162,6 +1180,7 @@ void Channel::MakeVoiceOff(WorldPacket* data, ObjectGuid guid)
 
 void Channel::JoinNotify(Player* p)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     if (_channelRights.flags & CHANNEL_RIGHT_CANT_SPEAK)
         return;
     if (p->GetSession()->HasPermission(rbac::RBAC_PERM_SILENTLY_JOIN_CHANNEL))
@@ -1179,6 +1198,7 @@ void Channel::JoinNotify(Player* p)
 
 void Channel::LeaveNotify(Player* p)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     if (_channelRights.flags & CHANNEL_RIGHT_CANT_SPEAK)
         return;
     if (p->GetSession()->HasPermission(rbac::RBAC_PERM_SILENTLY_JOIN_CHANNEL))
@@ -1195,6 +1215,7 @@ void Channel::LeaveNotify(Player* p)
 
 void Channel::FlagsNotify(Player* p)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     if (_channelRights.flags & CHANNEL_RIGHT_CANT_SPEAK)
         return;
     if (p->GetSession()->HasPermission(rbac::RBAC_PERM_SILENTLY_JOIN_CHANNEL))
@@ -1212,6 +1233,7 @@ void Channel::FlagsNotify(Player* p)
 
 void Channel::AddWatching(Player* p)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     if (!IsOn(p->GetGUID()))
         return;
     playersWatchingStore.insert(p);
@@ -1219,6 +1241,7 @@ void Channel::AddWatching(Player* p)
 
 void Channel::RemoveWatching(Player* p)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     PlayersWatchingContainer::iterator itr = playersWatchingStore.find(p);
     if (itr != playersWatchingStore.end())
         playersWatchingStore.erase(itr);
@@ -1226,6 +1249,7 @@ void Channel::RemoveWatching(Player* p)
 
 void Channel::ToggleModeration(Player* player)
 {
+    std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     ObjectGuid guid = player->GetGUID();
 
     if (!IsOn(guid))

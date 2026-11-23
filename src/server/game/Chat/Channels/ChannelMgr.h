@@ -23,6 +23,8 @@
 #include <map>
 #include <string>
 
+#include <mutex>
+
 #define MAX_CHANNEL_PASS_STR 31
 
 class ChannelMgr
@@ -49,6 +51,7 @@ public:
     static uint32 _channelIdMax;
 
 private:
+    std::mutex _lock;
     ChannelMap channels;
     TeamId _teamId;
     static ChannelRightsMap channels_rights;
