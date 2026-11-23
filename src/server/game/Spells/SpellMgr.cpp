@@ -34,6 +34,7 @@
 #include "World.h"
 
 #include <algorithm>
+#include <unordered_set>
 
 bool IsPrimaryProfessionSkill(uint32 skill)
 {
@@ -2477,7 +2478,12 @@ void SpellMgr::LoadSpellPetAuras()
 {
     uint32 oldMSTime = getMSTime();
 
-    mSpellPetAuraMap.clear();                                  // need for reload case
+    // Temucraft: characters keep pointers to these entries (Unit::m_petAuras), so a reload must not free them: that
+    // left every character with a pet aura pointing at freed memory, and its next save crashed. Entries stay where
+    // they are and are filled again; one that is no longer in the table is only emptied (it then gives no aura).
+    for (auto& [key, petAura] : mSpellPetAuraMap)
+        petAura = PetAura();
+    std::unordered_set<uint32> refilled;
 
     //                                                  0       1       2    3
     QueryResult result = WorldDatabase.Query("SELECT spell, effectId, pet, aura FROM spell_pet_auras");
@@ -2499,7 +2505,7 @@ void SpellMgr::LoadSpellPetAuras()
         uint32 aura = fields[3].Get<uint32>();
 
         SpellPetAuraMap::iterator itr = mSpellPetAuraMap.find((spell << 8) + eff);
-        if (itr != mSpellPetAuraMap.end())
+        if (itr != mSpellPetAuraMap.end() && refilled.count(itr->first))
             itr->second.AddAura(pet, aura);
         else
         {
@@ -2525,7 +2531,8 @@ void SpellMgr::LoadSpellPetAuras()
             }
 
             PetAura pa(pet, aura, spellInfo->Effects[eff].TargetA.GetTarget() == TARGET_UNIT_PET, spellInfo->Effects[eff].CalcValue());
-            mSpellPetAuraMap[(spell << 8) + eff] = pa;
+            mSpellPetAuraMap[(spell << 8) + eff] = pa;       // into the existing entry on a reload: same address
+            refilled.insert((spell << 8) + eff);
         }
 
         ++count;
