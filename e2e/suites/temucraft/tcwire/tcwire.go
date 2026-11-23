@@ -541,3 +541,173 @@ func DenyPermission(t *testing.T, authDB *sql.DB, accountID, perm uint32) {
 		authDB.Exec("DELETE FROM `rbac_account_permissions` WHERE `accountId` = ? AND `permissionId` = ?", accountID, perm)
 	})
 }
+
+// ---------------------------------------------------------------- chat channels
+
+// Channel opcodes and SMSG_CHANNEL_NOTIFY types (AzerothCore Opcodes.h, Channel.h).
+const (
+	CmsgMessageChat        uint16 = 0x095
+	CmsgJoinChannel        uint16 = 0x097
+	CmsgLeaveChannel       uint16 = 0x098
+	SmsgChannelNotify      uint16 = 0x099
+	CmsgChannelSetOwner    uint16 = 0x09D
+	CmsgChannelModerator   uint16 = 0x09F
+	ChatMsgChannel         uint8  = 0x11
+	NotifyYouJoined        uint8  = 0x02
+	NotifyYouLeft          uint8  = 0x03
+	NotifyNotMember        uint8  = 0x05
+	NotifyOwnerChanged     uint8  = 0x08
+	NotifyPlayerNotFound   uint8  = 0x09
+	langUniversal          uint32 = 0
+)
+
+// ChannelEvent is one SMSG_CHANNEL_NOTIFY (Notify set) or one channel chat line (Text set).
+type ChannelEvent struct {
+	Channel string
+	Notify  uint8
+	Text    string
+	Sender  uint64
+	IsChat  bool
+}
+
+// ChannelLog keeps every channel notify and channel chat line a bot receives.
+type ChannelLog struct {
+	mu     sync.Mutex
+	events []ChannelEvent
+}
+
+// WatchChannels arms a ChannelLog on the bot's world session; it is cancelled at test end.
+func WatchChannels(t *testing.T, w *client.WorldClient) *ChannelLog {
+	t.Helper()
+	l := &ChannelLog{}
+	cancel := w.AddPacketHook(func(op uint16, data []byte) {
+		switch op {
+		case SmsgChannelNotify:
+			if len(data) < 2 {
+				return
+			}
+			r := bytes.NewReader(data[1:])
+			e := ChannelEvent{Notify: data[0], Channel: readCString(r)}
+			l.mu.Lock()
+			l.events = append(l.events, e)
+			l.mu.Unlock()
+		case client.SmsgMessageChat:
+			if len(data) < 18 || data[0] != ChatMsgChannel {
+				return
+			}
+			r := bytes.NewReader(data)
+			var typ uint8
+			var lang, flags uint32
+			var sender, receiver uint64
+			binary.Read(r, binary.LittleEndian, &typ)
+			binary.Read(r, binary.LittleEndian, &lang)
+			binary.Read(r, binary.LittleEndian, &sender)
+			binary.Read(r, binary.LittleEndian, &flags)
+			channel := readCString(r)
+			binary.Read(r, binary.LittleEndian, &receiver)
+			e := ChannelEvent{Channel: channel, Text: Plain(readSized(r)), Sender: sender, IsChat: true}
+			l.mu.Lock()
+			l.events = append(l.events, e)
+			l.mu.Unlock()
+		}
+	})
+	t.Cleanup(cancel)
+	return l
+}
+
+// Len is the current end of the log (a mark).
+func (l *ChannelLog) Len() int { l.mu.Lock(); defer l.mu.Unlock(); return len(l.events) }
+
+// Since returns the events after mark.
+func (l *ChannelLog) Since(mark int) []ChannelEvent {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if mark > len(l.events) {
+		return nil
+	}
+	return append([]ChannelEvent(nil), l.events[mark:]...)
+}
+
+// WaitNotify waits for a notify of this type on this channel after mark.
+func (l *ChannelLog) WaitNotify(mark int, channel string, notify uint8, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		for _, e := range l.Since(mark) {
+			if !e.IsChat && e.Notify == notify && strings.EqualFold(e.Channel, channel) {
+				return true
+			}
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// WaitChat waits for a chat line on this channel after mark that contains substr.
+func (l *ChannelLog) WaitChat(mark int, channel, substr string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		for _, e := range l.Since(mark) {
+			if e.IsChat && strings.EqualFold(e.Channel, channel) && strings.Contains(e.Text, substr) {
+				return true
+			}
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func writeCString(buf *bytes.Buffer, s string) { buf.WriteString(s); buf.WriteByte(0) }
+
+// JoinChannel joins a custom chat channel (channel id 0, no password).
+func JoinChannel(t *testing.T, w *client.WorldClient, name string) {
+	t.Helper()
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.LittleEndian, uint32(0))
+	buf.WriteByte(0)
+	buf.WriteByte(0)
+	writeCString(&buf, name)
+	writeCString(&buf, "")
+	send(t, w, CmsgJoinChannel, &buf)
+}
+
+// LeaveChannel leaves a chat channel.
+func LeaveChannel(t *testing.T, w *client.WorldClient, name string) {
+	t.Helper()
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.LittleEndian, uint32(0))
+	writeCString(&buf, name)
+	send(t, w, CmsgLeaveChannel, &buf)
+}
+
+// ChannelSetOwner hands a channel to another player (the sender must own it).
+func ChannelSetOwner(t *testing.T, w *client.WorldClient, name, newOwner string) {
+	t.Helper()
+	var buf bytes.Buffer
+	writeCString(&buf, name)
+	writeCString(&buf, newOwner)
+	send(t, w, CmsgChannelSetOwner, &buf)
+}
+
+// ChannelModerator makes a player a moderator of a channel (the sender must be a moderator).
+func ChannelModerator(t *testing.T, w *client.WorldClient, name, player string) {
+	t.Helper()
+	var buf bytes.Buffer
+	writeCString(&buf, name)
+	writeCString(&buf, player)
+	send(t, w, CmsgChannelModerator, &buf)
+}
+
+// ChannelSay sends a chat line to a channel.
+func ChannelSay(t *testing.T, w *client.WorldClient, name, text string) {
+	t.Helper()
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.LittleEndian, uint32(ChatMsgChannel))
+	binary.Write(&buf, binary.LittleEndian, langUniversal)
+	writeCString(&buf, name)
+	writeCString(&buf, text)
+	send(t, w, CmsgMessageChat, &buf)
+}
