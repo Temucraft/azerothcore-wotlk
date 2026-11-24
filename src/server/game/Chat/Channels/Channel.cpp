@@ -1309,5 +1309,10 @@ void Channel::MakeModerationOff(WorldPacket* data, ObjectGuid guid)
 // that was deleted without leaving the channel (seen at shutdown with bots: SendToAll called a freed player).
 Player* Channel::MemberPlayer(PlayerInfo const& info)
 {
-    return ObjectAccessor::FindConnectedPlayer(info.player);
+    // also not while it is being taken apart: at shutdown a bot that was logging out was still found but its social
+    // data was already gone (crash 2026-11-24 20:29 at GetSocial()->HasIgnore)
+    Player* player = ObjectAccessor::FindConnectedPlayer(info.player);
+    if (!player || !player->IsInWorld() || !player->GetSocial() || !player->GetSession())
+        return nullptr;
+    return player;
 }
