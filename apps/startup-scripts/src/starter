@@ -263,14 +263,18 @@ EOF
 
 
 
-    # Create log files if specified
-    if [ -n "$SYSLOG" ]; then
-        [ ! -f "$SYSLOG" ] && touch "$SYSLOG"
-    fi
-
-    if [ -n "$SYSERR" ]; then
-        [ ! -f "$SYSERR" ] && touch "$SYSERR"
-    fi
+    # Temucraft: the console run below rewrites the logs, so keep the last run's (what led up to a crash) in old/
+    # named by when it was last written, 20 per file
+    for f in "$SYSLOG" "$SYSERR"; do
+        [ -n "$f" ] || continue
+        if [ -s "$f" ]; then
+            mkdir -p "$(dirname "$f")/old"
+            base="$(basename "$f")"
+            mv -f "$f" "$(dirname "$f")/old/${base%.*}-$(date -r "$f" +%Y-%m-%d_%H-%M-%S).${base##*.}"
+            ls -1t "$(dirname "$f")/old/${base%.*}-"* 2>/dev/null | tail -n +21 | xargs -r rm -f
+        fi
+        [ ! -f "$f" ] && touch "$f"
+    done
 
     # Execute with GDB
     if [ "${WITH_CONSOLE:-0}" -eq 0 ] && [ -n "$SYSLOG" ] && [ -n "$SYSERR" ]; then
