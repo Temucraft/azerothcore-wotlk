@@ -215,6 +215,7 @@ public:
     void JoinNotify(Player* p);
     void LeaveNotify(Player* p);
     void FlagsNotify(Player* p);
+    static Player* MemberPlayer(PlayerInfo const& info);   // Temucraft: the member's player from its guid, nullptr when gone
     static void CleanOldChannelsInDB();
     void ToggleModeration(Player* p);
 
@@ -301,7 +302,7 @@ private:
             MakeModeChange(&data, guid, oldFlag);
             SendToAll(&data);
 
-            FlagsNotify(pinfo.plrPtr);
+            FlagsNotify(MemberPlayer(pinfo));
         }
     }
 

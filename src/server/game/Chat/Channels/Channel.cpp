@@ -298,12 +298,12 @@ void Channel::LeaveChannel(Player* player, bool send)
                 ObjectGuid newowner;
                 for (Channel::PlayerContainer::const_iterator itr = playersStore.begin(); itr != playersStore.end(); ++itr)
                 {
+                    Player* member = MemberPlayer(itr->second);   // Temucraft: skip members whose player is gone
+                    if (!member)
+                        continue;
                     newowner = itr->second.player;
-                    if (itr->second.plrPtr->GetSession()->HasPermission(rbac::RBAC_PERM_CHANGE_CHANNEL_NOT_MODERATOR))
-                        _isOwnerGM = true;
-                    else
-                        _isOwnerGM = false;
-                    if (!itr->second.plrPtr->GetSession()->HasPermission(rbac::RBAC_PERM_CHANGE_CHANNEL_NOT_MODERATOR))
+                    _isOwnerGM = member->GetSession()->HasPermission(rbac::RBAC_PERM_CHANGE_CHANNEL_NOT_MODERATOR);
+                    if (!_isOwnerGM)
                         break;
                 }
                 SetOwner(newowner);
@@ -457,8 +457,11 @@ void Channel::KickOrBan(Player const* player, std::string const& badname, bool b
             ObjectGuid newowner;
             for (Channel::PlayerContainer::const_iterator itr = playersStore.begin(); itr != playersStore.end(); ++itr)
             {
+                Player* member = MemberPlayer(itr->second);   // Temucraft: skip members whose player is gone
+                if (!member)
+                    continue;
                 newowner = itr->second.player;
-                if (!itr->second.plrPtr->GetSession()->HasPermission(rbac::RBAC_PERM_CHANGE_CHANNEL_NOT_MODERATOR))
+                if (!member->GetSession()->HasPermission(rbac::RBAC_PERM_CHANGE_CHANNEL_NOT_MODERATOR))
                     break;
             }
             SetOwner(newowner);
@@ -722,7 +725,7 @@ void Channel::List(Player const* player)
     uint32 count  = 0;
     if (!(_channelRights.flags & CHANNEL_RIGHT_CANT_SPEAK))
         for (PlayerContainer::const_iterator i = playersStore.begin(); i != playersStore.end(); ++i)
-            if (Player* member = i->second.plrPtr)
+            if (Player* member = MemberPlayer(i->second))
                 if ((player->GetSession()->HasPermission(rbac::RBAC_PERM_WHO_SEE_ALL_SEC_LEVELS) ||
                      member->GetSession()->GetSecurity() <= AccountTypes(gmLevelInWhoList)) &&
                     member->IsVisibleGloballyFor(player))
@@ -805,7 +808,7 @@ void Channel::Say(ObjectGuid guid, std::string const& what, uint32 lang)
         return;
     }
 
-    Player* player = pinfo.plrPtr;
+    Player* player = MemberPlayer(pinfo);
     WorldPacket data;
 
     if (player)
@@ -889,7 +892,7 @@ void Channel::SetOwner(ObjectGuid guid, bool exclaim)
         if (p_itr != playersStore.end())
         {
             p_itr->second.SetOwner(false);
-            FlagsNotify(p_itr->second.plrPtr);
+            FlagsNotify(MemberPlayer(p_itr->second));
         }
     }
 
@@ -901,7 +904,7 @@ void Channel::SetOwner(ObjectGuid guid, bool exclaim)
         pinfo.SetModerator(true);
         uint8 oldFlag = pinfo.flags;
         pinfo.SetOwner(true);
-        FlagsNotify(pinfo.plrPtr);
+        FlagsNotify(MemberPlayer(pinfo));
 
         Player* player = ObjectAccessor::FindPlayer(_ownerGUID);
         if (player)
@@ -928,16 +931,18 @@ void Channel::SendToAll(WorldPacket* data, ObjectGuid guid)
 {
     std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     for (PlayerContainer::const_iterator i = playersStore.begin(); i != playersStore.end(); ++i)
-        if (i->second.plrPtr && (!guid || !i->second.plrPtr->GetSocial()->HasIgnore(guid)))
-            i->second.plrPtr->SendDirectMessage(data);
+        if (Player* member = MemberPlayer(i->second))
+            if (!guid || !member->GetSocial()->HasIgnore(guid))
+                member->SendDirectMessage(data);
 }
 
 void Channel::SendToAllButOne(WorldPacket* data, ObjectGuid who)
 {
     std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     for (PlayerContainer::const_iterator i = playersStore.begin(); i != playersStore.end(); ++i)
-        if (i->first != who && i->second.plrPtr)
-            i->second.plrPtr->SendDirectMessage(data);
+        if (i->first != who)
+            if (Player* member = MemberPlayer(i->second))
+                member->SendDirectMessage(data);
 }
 
 void Channel::SendToOne(WorldPacket* data, ObjectGuid who)
@@ -1218,6 +1223,8 @@ void Channel::FlagsNotify(Player* p)
     std::lock_guard<std::recursive_mutex> guard(_lock);   // Temucraft: map threads and the world thread both use channels
     if (_channelRights.flags & CHANNEL_RIGHT_CANT_SPEAK)
         return;
+    if (!p)   // Temucraft: the member's player is gone
+        return;
     if (p->GetSession()->HasPermission(rbac::RBAC_PERM_SILENTLY_JOIN_CHANNEL))
         return;
 
@@ -1296,4 +1303,11 @@ void Channel::MakeModerationOff(WorldPacket* data, ObjectGuid guid)
 {
     MakeNotifyPacket(data, CHAT_MODERATION_OFF_NOTICE);
     *data << guid;
+}
+
+// Temucraft: a member's player, found from its guid. The pointer kept when the member joined can point at a player
+// that was deleted without leaving the channel (seen at shutdown with bots: SendToAll called a freed player).
+Player* Channel::MemberPlayer(PlayerInfo const& info)
+{
+    return ObjectAccessor::FindConnectedPlayer(info.player);
 }
