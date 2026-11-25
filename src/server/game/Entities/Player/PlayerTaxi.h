@@ -34,6 +34,8 @@ public:
 
     [[nodiscard]] bool IsTaximaskNodeKnown(uint32 nodeidx) const
     {
+        if (!nodeidx || (nodeidx - 1) / 32 >= TaxiMaskSize)   // Temucraft: node ids come from the client (CMSG_ACTIVATETAXI*)
+            return false;
         uint8  field   = uint8((nodeidx - 1) / 32);
         uint32 submask = 1 << ((nodeidx - 1) % 32);
         return (m_taximask[field] & submask) == submask;
@@ -41,6 +43,8 @@ public:
 
     bool SetTaximaskNode(uint32 nodeidx)
     {
+        if (!nodeidx || (nodeidx - 1) / 32 >= TaxiMaskSize)   // Temucraft: no bit for this node
+            return false;
         uint8  field   = uint8((nodeidx - 1) / 32);
         uint32 submask = 1 << ((nodeidx - 1) % 32);
         if ((m_taximask[field] & submask) != submask)
