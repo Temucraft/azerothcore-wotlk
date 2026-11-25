@@ -22,7 +22,7 @@ DROP TABLE IF EXISTS `command`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `command` (
   `name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
-  `security` tinyint unsigned NOT NULL DEFAULT '0',
+  `security` smallint unsigned NOT NULL DEFAULT '0',
   `help` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   PRIMARY KEY (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Chat System';
