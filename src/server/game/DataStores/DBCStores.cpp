@@ -604,6 +604,14 @@ void LoadDBCStores(std::string const& dataPath)
                     continue;
             }
 
+            // Temucraft: our TaxiNodes.dbc has nodes above the 3.3.5 mask (Vashj'ir 449-456, Gilneas 457/458);
+            // writing their bits went past the end of these arrays into the next ones. They can't be used anyway.
+            if ((i - 1) / 32 >= TaxiMaskSize)
+            {
+                LOG_WARN("server.loading", "TaxiNodes.dbc node {} is above the taxi mask ({} nodes), skipped.", i, TaxiMaskSize * 32);
+                continue;
+            }
+
             // valid taxi network node
             uint8  field   = (uint8)((i - 1) / 32);
             uint32 submask = 1 << ((i - 1) % 32);
