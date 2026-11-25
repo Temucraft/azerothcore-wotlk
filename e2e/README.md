@@ -195,6 +195,31 @@ obtain that fixture fails as a precondition. Initial empty-loot coverage is not 
 the grave money range is now nonzero. Exact summon/drop probabilities and the dungeon's
 pool selection are not asserted by these lifecycle tests.
 
+## Temucraft suites
+
+`suites/temucraft/` holds the tests of the Temucraft modules and of Temucraft's own core fixes. Each folder is one
+suite; [`suites/temucraft/README.md`](suites/temucraft/README.md) has the realm settings they expect and more notes.
+
+| Suite | What it checks |
+|-------|----------------|
+| `commands` | `.temucraft` subcommands answer; an RBAC-denied one does nothing |
+| `debugcmds` | `.gps` gives exactly one `.go xyz` line for GM level 3 and for security 0, none when permission 505 is denied; security 0 may run `.lookup item`, `.distance`, `.mmap loc`, `.list auras`, not `.lookup player ip` |
+| `pools` | pooled mining, herb and fishing nodes are spawned on maps 0 and 1 (core 9e482708e) |
+| `hearthstone` | hearthstone cooldown by command and innkeeper gossip; "no cooldown" after a cast; the innkeeper choice sets off no Trick or Treat |
+| `firstmount` | the custom race first mount quests are each for one race; a Tauren is offered only the Tauren quest |
+| `classes` | Parachute (55001) has no Engineering condition and casts without it; Earthmother's Embrace isn't relearned at login |
+| `merchants` | a Sealed Crate turn-in gives Merchant's Favor and reputation; no two `currencytypes_dbc` rows share a bit |
+| `shop`, `courier`, `reagentbag`, `auras`, `challenges` | curator, courier, reagent bag addon, aura toys, Self-Found |
+| `reputation`, `invasion`, `channels` | reputation slots under 128, the invasion announcement, chat channel crash |
+
+Run just them (from `e2e/`, `E2E_*` exported):
+
+```bash
+go test -tags=e2e ./suites/temucraft/... -count=1 -v -timeout 60m -parallel 1 -p 1
+make e2e-category C=temucraft
+go test -tags=e2e ./suites/temucraft/debugcmds -count=1 -v -timeout 15m   # one suite
+```
+
 ## Parallelism and isolation
 
 ### Model
