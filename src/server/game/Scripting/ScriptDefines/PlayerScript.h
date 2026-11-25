@@ -237,6 +237,8 @@ enum PlayerHook
     PLAYERHOOK_ON_GET_TRAINER_SPELL_STATE,
     PLAYERHOOK_ON_AFTER_TRAIN_SPELL,
     PLAYERHOOK_ON_GET_QUEST_MIN_LEVEL,
+    PLAYERHOOK_ON_SEND_TAXI_MENU,
+    PLAYERHOOK_CAN_FLY_THROUGH_TAXI_NODE,
     PLAYERHOOK_END
 };
 
@@ -984,6 +986,28 @@ public:
      * @param minLevel The quest's minimum level (Quest::GetMinLevel), to raise or lower for this player
      */
     virtual void OnPlayerGetQuestMinLevel(Player const* /*player*/, Quest const* /*quest*/, uint32& /*minLevel*/) {}
+
+    /**
+     * @brief Called when a flight master's map is about to be sent (SMSG_SHOWTAXINODES), with the node mask the
+     * client gets. Change the mask to show the client more or fewer nodes for this map only; the player's own
+     * known nodes (PlayerTaxi) are not changed.
+     *
+     * @param player Contains information about the Player
+     * @param flightMaster The flight master
+     * @param currentNode The node the player is at
+     * @param mask The mask sent to the client (the player's known nodes, or every node for a taxi cheater)
+     */
+    virtual void OnPlayerSendTaxiMenu(Player* /*player*/, Creature* /*flightMaster*/, uint32 /*currentNode*/, TaxiMask& /*mask*/) {}
+
+    /**
+     * @brief Called for a node in the middle of a multi-hop flight (CMSG_ACTIVATETAXIEXPRESS) that the player does
+     * not know. Return true to let the player fly through it (it is not learned). The first and last node of a
+     * flight must always be known.
+     *
+     * @param player Contains information about the Player
+     * @param nodeId The taxi node flown through
+     */
+    [[nodiscard]] virtual bool OnPlayerCanFlyThroughTaxiNode(Player* /*player*/, uint32 /*nodeId*/) { return false; }
 };
 
 #endif

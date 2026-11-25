@@ -1015,6 +1015,16 @@ void ScriptMgr::OnPlayerGetQuestMinLevel(Player const* player, Quest const* ques
         script->OnPlayerGetQuestMinLevel(player, quest, minLevel));
 }
 
+void ScriptMgr::OnPlayerSendTaxiMenu(Player* player, Creature* flightMaster, uint32 currentNode, TaxiMask& mask)
+{
+    CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_SEND_TAXI_MENU, script->OnPlayerSendTaxiMenu(player, flightMaster, currentNode, mask));
+}
+
+bool ScriptMgr::OnPlayerCanFlyThroughTaxiNode(Player* player, uint32 nodeId)
+{
+    CALL_ENABLED_BOOLEAN_HOOKS_WITH_DEFAULT_FALSE(PlayerScript, PLAYERHOOK_CAN_FLY_THROUGH_TAXI_NODE, script->OnPlayerCanFlyThroughTaxiNode(player, nodeId));
+}
+
 PlayerScript::PlayerScript(char const* name, std::vector<uint16> enabledHooks)
     : ScriptObject(name, PLAYERHOOK_END)
 {

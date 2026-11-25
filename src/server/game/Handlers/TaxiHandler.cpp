@@ -99,7 +99,11 @@ void WorldSession::SendTaxiMenu(Creature* unit)
     data << uint32(1);
     data << unit->GetGUID();
     data << uint32(curloc);
-    GetPlayer()->m_taxi.AppendTaximaskTo(data, GetPlayer()->isTaxiCheater());
+    // the mask the client gets; scripts may add nodes for this map only (Temucraft: fly through unknown nodes)
+    TaxiMask mask = GetPlayer()->isTaxiCheater() ? sTaxiNodesMask : GetPlayer()->m_taxi.GetTaxiMask();
+    sScriptMgr->OnPlayerSendTaxiMenu(GetPlayer(), unit, curloc, mask);
+    for (uint32 field : mask)
+        data << uint32(field);
     SendPacket(&data);
 
     LOG_DEBUG("network", "WORLD: Sent SMSG_SHOWTAXINODES");
@@ -183,7 +187,9 @@ void WorldSession::HandleActivateTaxiExpressOpcode(WorldPacket& recvData)
         uint32 node;
         recvData >> node;
 
-        if (!GetPlayer()->m_taxi.IsTaximaskNodeKnown(node) && !GetPlayer()->isTaxiCheater())
+        // a node in the middle of the route may be one a script lets the player fly through (it is not learned)
+        if (!GetPlayer()->m_taxi.IsTaximaskNodeKnown(node) && !GetPlayer()->isTaxiCheater() &&
+            !(i > 0 && i + 1 < node_count && sScriptMgr->OnPlayerCanFlyThroughTaxiNode(GetPlayer(), node)))
         {
             SendActivateTaxiReply(ERR_TAXINOTVISITED);
             recvData.rfinish();

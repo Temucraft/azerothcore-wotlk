@@ -487,6 +487,8 @@ public: /* PlayerScript */
     void OnPlayerGetTrainerSpellState(Player const* player, uint32 trainerId, uint32 spellId, Trainer::SpellState& state);
     void OnPlayerAfterTrainSpell(Player* player, Creature* trainer, uint32 spellId);
     void OnPlayerGetQuestMinLevel(Player const* player, Quest const* quest, uint32& minLevel);
+    void OnPlayerSendTaxiMenu(Player* player, Creature* flightMaster, uint32 currentNode, TaxiMask& mask);
+    bool OnPlayerCanFlyThroughTaxiNode(Player* player, uint32 nodeId);
 
     // Anti cheat
     void AnticheatSetCanFlybyServer(Player* player, bool apply);

@@ -53,6 +53,7 @@ public:
     }
 
     void AppendTaximaskTo(ByteBuffer& data, bool all);
+    [[nodiscard]] TaxiMask const& GetTaxiMask() const { return m_taximask; }
 
     // Destinations
     bool LoadTaxiDestinationsFromString(std::string const& values, TeamId teamId);
