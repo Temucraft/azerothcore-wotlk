@@ -628,6 +628,8 @@ void World::SetInitialWorldSettings()
 
     LOG_INFO("server.loading", "Loading Objects Pooling Data...");
     sPoolMgr->LoadFromDB();
+    // Temucraft: maps already made while the spawns loaded (zone and area lookups) still have empty pool lists
+    sMapMgr->DoForAllMaps([](Map* map) { map->InitPools(); });
 
     LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadHolidayDates();                           // Must be after loading DBC

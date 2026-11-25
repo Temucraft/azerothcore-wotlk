@@ -85,6 +85,13 @@ Map::Map(uint32 id, uint32 InstanceId, uint8 SpawnMode, Map* _parent) :
     _poolData = sPoolMgr->InitPoolsForMap(this);
 }
 
+// Temucraft: a map made before PoolMgr::LoadFromDB (Calculate.*.Zone.Area.Data makes the continents while the spawns
+// load, to look up zones) got an empty pool list and would never spawn pooled ore, herbs, fish or rares
+void Map::InitPools()
+{
+    _poolData = sPoolMgr->InitPoolsForMap(this);
+}
+
 // Hook called after map is created AND after added to map list
 void Map::OnCreateMap()
 {

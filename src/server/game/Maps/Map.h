@@ -382,6 +382,7 @@ public:
     }
 
     SpawnedPoolData& GetPoolData() { return *_poolData; }
+    void InitPools();   // Temucraft: (re)reads which pools this map spawns, for maps made before the pools were loaded
     [[nodiscard]] SpawnedPoolData const& GetPoolData() const { return *_poolData; }
 
     MapInstanced* ToMapInstanced() { if (Instanceable())  return reinterpret_cast<MapInstanced*>(this); else return nullptr;  }
