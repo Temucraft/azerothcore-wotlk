@@ -275,6 +275,16 @@ void Channel::LeaveChannel(Player* player, bool send)
     bool changeowner = playersStore[guid].IsOwner();
 
     playersStore.erase(guid);
+
+    // Temucraft: at shutdown every player and bot leaves at once (playerbots' LogoutAllBots in OnShutdown, then
+    // KickAll). Nobody needs the leave notices or a new owner then, and the announce to every member of the big
+    // channels is where the shutdown crash happened (Channel::SendToAll). Just drop the member.
+    if (World::IsStopped())
+    {
+        RemoveWatching(player);
+        return;
+    }
+
     if (_announce && ShouldAnnouncePlayer(player))
     {
         WorldPacket data;
