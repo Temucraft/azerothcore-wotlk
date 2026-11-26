@@ -3,6 +3,7 @@
 package hearthstone_test
 
 import (
+	"database/sql"
 	"encoding/binary"
 	"strings"
 	"sync"
@@ -66,8 +67,11 @@ func (cw *castWatch) snapshot() (casts, pushes []uint32) {
 // its choice page kept the innkeeper's menu id, so picking the option, or the first choice, played Trick or Treat.
 // Now the option takes the last index and the choices go out under a menu id of their own.
 //
-// Uses an innkeeper whose SmartAI casts 24751 on a gossip pick. Picks the first choice (index 0), the exact case that
-// went wrong. Oracles: neither pick casts 24751, the bot has neither aura, no item is pushed, and the setting is saved.
+// Uses an innkeeper whose SmartAI casts 24751 on a gossip pick, directly or through a timed action list, when the
+// world database has one (pickInnkeeper); otherwise any plain innkeeper with a gossip menu. That one can't play
+// Trick or Treat at all, so the item index and menu id checks carry the test then (they are what 3512616 changed).
+// Picks the first choice (index 0), the exact case that went wrong. Oracles: neither pick casts 24751, the bot has
+// neither aura, no item is pushed, and the setting is saved.
 func TestHearthstone_InnkeeperChoiceNoTrickOrTreat(t *testing.T) {
 	meta.Begin(t, meta.TestMeta{Tags: []string{"med", "temucraft", "travel", "hearthstone", "gossip"}, Runtime: "med", Category: "temucraft/hearthstone"})
 
@@ -76,13 +80,7 @@ func TestHearthstone_InnkeeperChoiceNoTrickOrTreat(t *testing.T) {
 		e2eharness.Preconditionf(t, "world DB: %v", err)
 	}
 	defer worldDB.Close()
-	var innkeeper uint32
-	err = worldDB.QueryRow("SELECT ct.`entry` FROM `creature_template` ct JOIN `smart_scripts` ss ON ss.`entryorguid` = ct.`entry` AND ss.`source_type` = 0 "+
-		"WHERE ct.`npcflag` & 65536 AND ct.`ScriptName` = '' AND ct.`entry` < 100000 AND ss.`event_type` = 62 AND ss.`action_param1` = ? "+
-		"ORDER BY ct.`entry` LIMIT 1", spellTrickOrTreat).Scan(&innkeeper)
-	if err != nil {
-		e2eharness.Preconditionf(t, "no plain innkeeper whose SmartAI casts Trick or Treat on a gossip pick: %v", err)
-	}
+	innkeeper, smart := pickInnkeeper(t, worldDB)
 
 	bot := e2eharness.NewSolo(t, e2eharness.ScenarioOpts{Prefix: "TcHsToT", Level: 80})
 	bot.TeleportPad(t, e2eharness.PackagePad(t))
@@ -142,5 +140,37 @@ func TestHearthstone_InnkeeperChoiceNoTrickOrTreat(t *testing.T) {
 	if v, ok := saved(t, bot); !ok || v == 45 {
 		e2eharness.Assertf(t, "the innkeeper choice was not saved (value=%d, row=%v)", v, ok)
 	}
-	t.Logf("PASS innkeeper %d: hearthstone choice saved, no Trick or Treat, no items", innkeeper)
+	t.Logf("PASS innkeeper %d (Trick or Treat SmartAI: %v): hearthstone choice saved, no Trick or Treat, no items", innkeeper, smart)
+}
+
+// pickInnkeeper finds a plain innkeeper (npcflag INNKEEPER, no ScriptName, so mod-temucraft-travel adds its line, and a
+// gossip menu) and prefers one whose SmartAI casts Trick or Treat on a gossip pick: a GOSSIP_SELECT (62) row that
+// casts 24751 itself, or that starts a timed action list (action 80, or 87/88 random lists) whose rows cast it. The
+// 2026-11-26 PTR run found no direct row (the stock data goes through action lists or has none), which failed the
+// test as a precondition; now it falls back to any plain innkeeper and says so.
+func pickInnkeeper(t *testing.T, worldDB *sql.DB) (entry uint32, smart bool) {
+	t.Helper()
+	const plain = "ct.`npcflag` & 65536 AND ct.`ScriptName` = '' AND ct.`gossip_menu_id` <> 0 AND ct.`entry` < 100000"
+	err := worldDB.QueryRow("SELECT ct.`entry` FROM `creature_template` ct "+
+		"JOIN `smart_scripts` ss ON ss.`entryorguid` = ct.`entry` AND ss.`source_type` = 0 AND ss.`event_type` = 62 "+
+		"WHERE "+plain+" AND ct.`AIName` = 'SmartAI' AND ("+
+		"(ss.`action_type` IN (11, 85, 86) AND ss.`action_param1` = ?) OR "+
+		"(ss.`action_type` = 80 AND EXISTS (SELECT 1 FROM `smart_scripts` al WHERE al.`source_type` = 9 AND al.`entryorguid` = ss.`action_param1` "+
+		"AND al.`action_type` IN (11, 85, 86) AND al.`action_param1` = ?)) OR "+
+		"(ss.`action_type` IN (87, 88) AND EXISTS (SELECT 1 FROM `smart_scripts` al WHERE al.`source_type` = 9 "+
+		"AND al.`entryorguid` BETWEEN ss.`action_param1` AND GREATEST(ss.`action_param1`, ss.`action_param2`, ss.`action_param3`, ss.`action_param4`, ss.`action_param5`, ss.`action_param6`) "+
+		"AND al.`action_type` IN (11, 85, 86) AND al.`action_param1` = ?))) "+
+		"ORDER BY ct.`entry` LIMIT 1", spellTrickOrTreat, spellTrickOrTreat, spellTrickOrTreat).Scan(&entry)
+	if err == nil {
+		return entry, true
+	}
+	if err != sql.ErrNoRows {
+		e2eharness.HarnessFailf(t, "innkeeper SmartAI query: %v", err)
+	}
+	if err := worldDB.QueryRow("SELECT ct.`entry` FROM `creature_template` ct WHERE " + plain + " ORDER BY ct.`entry` LIMIT 1").Scan(&entry); err != nil {
+		e2eharness.Preconditionf(t, "no plain innkeeper with a gossip menu in the world database: %v", err)
+	}
+	t.Logf("no innkeeper whose SmartAI casts Trick or Treat (%d) on a gossip pick; using plain innkeeper %d: the cast checks "+
+		"can't fail with it, the item index and menu id checks are the oracle", spellTrickOrTreat, entry)
+	return entry, false
 }

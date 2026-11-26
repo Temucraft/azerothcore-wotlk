@@ -3,6 +3,7 @@
 package auras_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 const (
 	toyA, auraA uint32 = 610110, 57901
 	toyB, auraB uint32 = 610111, 70788
+	permUse     uint32 = 103650 // Temucraft: use cosmetic aura toys
 )
 
 type toy struct {
@@ -39,9 +41,35 @@ func giveToy(t *testing.T, bot *e2eharness.ScenarioBot, entry uint32) toy {
 func use(t *testing.T, bot *e2eharness.ScenarioBot, chat *tcwire.Collector, it toy, want string) {
 	t.Helper()
 	m := chat.Mark()
+	// an item the server refuses comes back as SMSG_INVENTORY_CHANGE_FAILURE (the equip error is its first byte)
+	waitErr, cancel := tcwire.ArmPacket(bot.World, tcwire.SmsgInventoryChangeFailure, nil)
+	defer cancel()
 	tcwire.UseItem(t, bot.World, it.bag, it.slot, it.guid, it.spell)
 	if _, ok := chat.WaitSystem(m, want, tcwire.DefaultReplyTimeout); !ok {
-		e2eharness.Assertf(t, "using the toy: no %q (got %q)", want, chat.SystemSince(m))
+		equipErr := "none"
+		if d, ok := waitErr(10 * time.Millisecond); ok && len(d) > 0 {
+			equipErr = fmt.Sprintf("%d", d[0])
+		}
+		e2eharness.Assertf(t, "using the toy (bag %d slot %d, spell %d): no %q (system %q, notifications %q, equip error %s)",
+			it.bag, it.slot, it.spell, want, chat.SystemSince(m), chat.NotesSince(m), equipErr)
+	}
+}
+
+// checkPermission: the toys need RBAC permission 103650 (mod_temucraft_auras_rbac_player.sql), linked to the player
+// roles 195 and 1010. A harness account is GM level 3 (role 1014 -> ... -> 1010 on Temucraft, 192 -> ... -> 195 on
+// stock AC). Without the links the toy only says "You can't use this here.": say why instead.
+func checkPermission(t *testing.T, bot *e2eharness.ScenarioBot) {
+	t.Helper()
+	var name string
+	if err := bot.AuthDB.QueryRow("SELECT `name` FROM `rbac_permissions` WHERE `id` = ?", permUse).Scan(&name); err != nil {
+		e2eharness.Preconditionf(t, "RBAC permission %d is not in the auth database (%v): apply mod-temucraft-courier's db-auth SQL (mod_temucraft_auras_rbac_player.sql)", permUse, err)
+	}
+	var links int
+	if err := bot.AuthDB.QueryRow("SELECT COUNT(*) FROM `rbac_linked_permissions` WHERE `linkedId` = ? AND `id` IN (195, 1010)", permUse).Scan(&links); err != nil {
+		e2eharness.HarnessFailf(t, "rbac_linked_permissions: %v", err)
+	}
+	if links == 0 {
+		e2eharness.Preconditionf(t, "RBAC permission %d (%s) is linked to neither 195 nor 1010: re-run mod_temucraft_auras_rbac_player.sql, then .reload rbac", permUse, name)
 	}
 }
 
@@ -58,6 +86,7 @@ func TestAuras_ToySwitchesAndRemembers(t *testing.T) {
 	meta.Begin(t, meta.TestMeta{Tags: []string{"med", "temucraft", "auras"}, Runtime: "med", Category: "temucraft/auras"})
 
 	bot := e2eharness.NewSolo(t, e2eharness.ScenarioOpts{Prefix: "TcAura", Level: 80})
+	checkPermission(t, bot)
 	bot.TeleportPad(t, e2eharness.PackagePad(t))
 	chat := tcwire.Collect(t, bot.World)
 	a, b := giveToy(t, bot, toyA), giveToy(t, bot, toyB)

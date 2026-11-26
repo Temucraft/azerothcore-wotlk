@@ -23,19 +23,24 @@ import (
 
 // 3.3.5a opcodes the harness doesn't name.
 const (
-	CmsgUseItem         uint16 = 0x0AB
-	CmsgGossipHello     uint16 = 0x17B
-	CmsgGossipSelectOpt uint16 = 0x17C
-	SmsgGossipMessage   uint16 = 0x17D
-	SmsgGossipComplete  uint16 = 0x17E
-	SmsgListInventory   uint16 = 0x19F
-	SmsgShowBank        uint16 = 0x1B8
-	SmsgNotification    uint16 = 0x1CB
-	SmsgClearCooldown   uint16 = 0x1DE
-	CmsgSendMail        uint16 = 0x238
-	SmsgSendMailResult  uint16 = 0x239
-	SmsgShowMailbox     uint16 = 0x297
-	SmsgTradeStatus     uint16 = 0x120
+	CmsgUseItem                uint16 = 0x0AB
+	CmsgGossipHello            uint16 = 0x17B
+	CmsgGossipSelectOpt        uint16 = 0x17C
+	SmsgGossipMessage          uint16 = 0x17D
+	SmsgGossipComplete         uint16 = 0x17E
+	SmsgListInventory          uint16 = 0x19F
+	SmsgShowBank               uint16 = 0x1B8
+	SmsgNotification           uint16 = 0x1CB
+	SmsgClearCooldown          uint16 = 0x1DE
+	CmsgSendMail               uint16 = 0x238
+	SmsgSendMailResult         uint16 = 0x239
+	SmsgShowMailbox            uint16 = 0x297
+	SmsgTradeStatus            uint16 = 0x120
+	SmsgInventoryChangeFailure uint16 = 0x112
+	// SMSG_GM_MESSAGECHAT: what a chat line from a sender with the GM chat permission (372) comes as. Every harness
+	// bot is GM level 3 (role 1014 on Temucraft, which has 372), so its own whispers, addon messages to itself and
+	// channel lines arrive as this opcode, with the sender's name before the channel name / receiver guid.
+	SmsgGmMessageChat   uint16 = 0x3B3
 	ChatMsgSystem       uint8  = 0x00
 	ChatMsgSay          uint8  = 0x01
 	ChatMsgWhisper      uint8  = 0x07
@@ -46,14 +51,18 @@ const (
 	DefaultReplyTimeout        = 5 * time.Second
 )
 
-// Chat is one SMSG_MESSAGECHAT.
+// Chat is one SMSG_MESSAGECHAT or SMSG_GM_MESSAGECHAT.
 type Chat struct {
 	Type     uint8
 	Lang     uint32
 	Sender   uint64
 	Receiver uint64
+	Channel  string // CHAT_MSG_CHANNEL only
 	Text     string
 }
+
+// IsChatOpcode reports whether a packet is a chat line (plain or from a GM sender).
+func IsChatOpcode(op uint16) bool { return op == client.SmsgMessageChat || op == SmsgGmMessageChat }
 
 func isMonsterType(t uint8) bool {
 	switch t {
@@ -87,7 +96,14 @@ func readSized(r *bytes.Reader) string {
 }
 
 // ParseChat decodes an SMSG_MESSAGECHAT body (AzerothCore's ChatHandler::BuildChatPacket layout).
-func ParseChat(data []byte) (Chat, bool) {
+func ParseChat(data []byte) (Chat, bool) { return parseChat(data, false) }
+
+// ParseChatOp decodes a chat packet of either opcode (see IsChatOpcode).
+func ParseChatOp(op uint16, data []byte) (Chat, bool) {
+	return parseChat(data, op == SmsgGmMessageChat)
+}
+
+func parseChat(data []byte, gm bool) (Chat, bool) {
 	var c Chat
 	if len(data) < 17 {
 		return c, false
@@ -105,8 +121,11 @@ func ParseChat(data []byte) (Chat, bool) {
 			_ = readSized(r)
 		}
 	} else {
+		if gm {
+			_ = readSized(r) // the GM sender's name
+		}
 		if c.Type == chatMsgChannel {
-			_ = readCString(r)
+			c.Channel = readCString(r)
 		}
 		binary.Read(r, binary.LittleEndian, &c.Receiver)
 	}
@@ -135,8 +154,8 @@ func Collect(t *testing.T, w *client.WorldClient) *Collector {
 	c := &Collector{}
 	c.cancel = w.AddPacketHook(func(op uint16, data []byte) {
 		switch op {
-		case client.SmsgMessageChat:
-			m, ok := ParseChat(data)
+		case client.SmsgMessageChat, SmsgGmMessageChat:
+			m, ok := ParseChatOp(op, data)
 			if !ok {
 				return
 			}
@@ -546,20 +565,32 @@ func DenyPermission(t *testing.T, authDB *sql.DB, accountID, perm uint32) {
 
 // Channel opcodes and SMSG_CHANNEL_NOTIFY types (AzerothCore Opcodes.h, Channel.h).
 const (
-	CmsgMessageChat        uint16 = 0x095
-	CmsgJoinChannel        uint16 = 0x097
-	CmsgLeaveChannel       uint16 = 0x098
-	SmsgChannelNotify      uint16 = 0x099
-	CmsgChannelSetOwner    uint16 = 0x09D
-	CmsgChannelModerator   uint16 = 0x09F
-	ChatMsgChannel         uint8  = 0x11
-	NotifyYouJoined        uint8  = 0x02
-	NotifyYouLeft          uint8  = 0x03
-	NotifyNotMember        uint8  = 0x05
-	NotifyOwnerChanged     uint8  = 0x08
-	NotifyPlayerNotFound   uint8  = 0x09
-	langUniversal          uint32 = 0
+	CmsgMessageChat      uint16 = 0x095
+	CmsgJoinChannel      uint16 = 0x097
+	CmsgLeaveChannel     uint16 = 0x098
+	SmsgChannelNotify    uint16 = 0x099
+	CmsgChannelSetOwner  uint16 = 0x09D
+	CmsgChannelModerator uint16 = 0x09F
+	ChatMsgChannel       uint8  = 0x11
+	NotifyYouJoined      uint8  = 0x02
+	NotifyYouLeft        uint8  = 0x03
+	NotifyNotMember      uint8  = 0x05
+	NotifyOwnerChanged   uint8  = 0x08
+	NotifyPlayerNotFound uint8  = 0x09
+	LangOrcish           uint32 = 1
+	LangCommon           uint32 = 7
 )
+
+// NativeLang is the language a character of this race speaks in chat (the harness's choice for GM commands):
+// Orcish for the stock Horde races, Common for the rest. The server refuses LANG_UNIVERSAL from a client
+// ("Possible hacking-attempt ... universal language") and answers it with only a notification.
+func NativeLang(race uint8) uint32 {
+	switch race {
+	case 2, 5, 6, 8, 10:
+		return LangOrcish
+	}
+	return LangCommon
+}
 
 // ChannelEvent is one SMSG_CHANNEL_NOTIFY (Notify set) or one channel chat line (Text set).
 type ChannelEvent struct {
@@ -591,21 +622,15 @@ func WatchChannels(t *testing.T, w *client.WorldClient) *ChannelLog {
 			l.mu.Lock()
 			l.events = append(l.events, e)
 			l.mu.Unlock()
-		case client.SmsgMessageChat:
+		case client.SmsgMessageChat, SmsgGmMessageChat:
 			if len(data) < 18 || data[0] != ChatMsgChannel {
 				return
 			}
-			r := bytes.NewReader(data)
-			var typ uint8
-			var lang, flags uint32
-			var sender, receiver uint64
-			binary.Read(r, binary.LittleEndian, &typ)
-			binary.Read(r, binary.LittleEndian, &lang)
-			binary.Read(r, binary.LittleEndian, &sender)
-			binary.Read(r, binary.LittleEndian, &flags)
-			channel := readCString(r)
-			binary.Read(r, binary.LittleEndian, &receiver)
-			e := ChannelEvent{Channel: channel, Text: Plain(readSized(r)), Sender: sender, IsChat: true}
+			m, ok := ParseChatOp(op, data)
+			if !ok {
+				return
+			}
+			e := ChannelEvent{Channel: m.Channel, Text: Plain(m.Text), Sender: m.Sender, IsChat: true}
 			l.mu.Lock()
 			l.events = append(l.events, e)
 			l.mu.Unlock()
@@ -701,12 +726,12 @@ func ChannelModerator(t *testing.T, w *client.WorldClient, name, player string) 
 	send(t, w, CmsgChannelModerator, &buf)
 }
 
-// ChannelSay sends a chat line to a channel.
+// ChannelSay sends a chat line to a channel, in the character's own language (NativeLang).
 func ChannelSay(t *testing.T, w *client.WorldClient, name, text string) {
 	t.Helper()
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.LittleEndian, uint32(ChatMsgChannel))
-	binary.Write(&buf, binary.LittleEndian, langUniversal)
+	binary.Write(&buf, binary.LittleEndian, NativeLang(w.CharRace()))
 	writeCString(&buf, name)
 	writeCString(&buf, text)
 	send(t, w, CmsgMessageChat, &buf)

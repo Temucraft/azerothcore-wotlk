@@ -39,8 +39,13 @@ func reputations(t *testing.T, bot *e2eharness.ScenarioBot) map[uint32]int32 {
 }
 
 // Turning in a Sealed Apprentice Crate at a supply quartermaster: the crate is taken, Merchant's Favor is given, and
-// the standing with 2233 or 2234 goes up. The crate comes from .additem; the quest is accepted, completed and
-// rewarded through the quest giver packets, as a player does.
+// the standing with 2233 or 2234 goes up.
+//
+// Setup in the order a player gets there: the quest is in the log first (.quest add, INCOMPLETE), then the crate
+// comes (.additem), which completes the quest's one objective (RequiredItemId1 = the crate) through the item-added
+// quest check. The 2026-11-26 run accepted the quest through CMSG_QUESTGIVER_ACCEPT_QUEST with the crate already in
+// the bags and found status NONE: the accept never took, so the oracle never ran. The turn-in (complete + reward) is
+// still done through the quest giver packets, as a player does.
 func TestCrates_TurnInGivesFavorAndReputation(t *testing.T) {
 	meta.Begin(t, meta.TestMeta{Tags: []string{"short", "temucraft", "merchants", "quests", "reputation"}, Runtime: "short", Category: "temucraft/merchants"})
 
@@ -56,8 +61,17 @@ func TestCrates_TurnInGivesFavorAndReputation(t *testing.T) {
 
 	bot := e2eharness.NewSolo(t, e2eharness.ScenarioOpts{Prefix: "TcCrate", Level: 10})
 	bot.TeleportPad(t, e2eharness.PackagePad(t))
-	qm := bot.Spawn(t, npcQuartermaster, 15*time.Second)
+	// the quest before the quartermaster is spawned: .quest add works on the selected player or yourself, and a
+	// selected creature makes it fail
+	bot.AddQuest(t, questSealedCrate)
 	bot.AddItemWait(t, itemSealedCrate, 1)
+	bot.FlushWorld(t)
+	if status, ok := bot.QuestStatusAfterSave(t, questSealedCrate); !ok || status != e2eharness.QuestStatusComplete {
+		e2eharness.Assertf(t, "quest %d not complete after the crate (%d) came into the bags (status=%s, row=%v): its objective "+
+			"(RequiredItemId1/RequiredItemCount1 in mod_temucraft_merchants_crates.sql) doesn't count the crate",
+			questSealedCrate, itemSealedCrate, e2eharness.QuestStatusName(status), ok)
+	}
+	qm := bot.Spawn(t, npcQuartermaster, 15*time.Second)
 	before := reputations(t, bot)
 	favorBefore := bot.InventoryCount(t, itemMerchantsFavor)
 	bot.GM(t, ".gm off")
@@ -66,13 +80,7 @@ func TestCrates_TurnInGivesFavorAndReputation(t *testing.T) {
 	if err := bot.World.QuestgiverHello(qm); err != nil {
 		e2eharness.HarnessFailf(t, "questgiver hello: %v", err)
 	}
-	if err := bot.World.QuestgiverAcceptQuest(qm, questSealedCrate); err != nil {
-		e2eharness.HarnessFailf(t, "accept %d: %v", questSealedCrate, err)
-	}
 	bot.FlushWorld(t)
-	if status, ok := bot.QuestStatusAfterSave(t, questSealedCrate); !ok || status != e2eharness.QuestStatusComplete {
-		e2eharness.Preconditionf(t, "quest %d not complete with the crate in the bags (status=%s, row=%v)", questSealedCrate, e2eharness.QuestStatusName(status), ok)
-	}
 	if err := bot.World.QuestgiverCompleteQuest(qm, questSealedCrate); err != nil {
 		e2eharness.HarnessFailf(t, "complete %d: %v", questSealedCrate, err)
 	}

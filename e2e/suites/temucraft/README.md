@@ -6,7 +6,7 @@ bots in to a running Temucraft worldserver and check what the modules do through
 | Folder | What it checks | Module |
 |---|---|---|
 | `commands` | `.temucraft hearthstone`, `.temucraft challenge` and `.temucraft shop` answer; `.temucraft` lists its subcommands; a command whose RBAC permission is denied to the account does nothing while the others keep working | mod-temucraft-travel, -challenges, -shop |
-| `shop` | the Temucraft Curator's gossip: 8 "Browse:" categories, a category opens a vendor window with goods, the balance line, and (when the realm sells tokens for gold) the gold really buys a token | mod-temucraft-shop |
+| `shop` | the Temucraft Curator's gossip: the "Browse:" categories of CategoryNames (11, in order), each opens a vendor window and the first has goods, the balance line, and (when the realm sells tokens for gold) the gold really buys a token | mod-temucraft-shop |
 | `courier` | `.temucraft courier`: the courier's gossip opens the bank and the mailbox, another player is refused and gets no menu, a second call inside the cooldown is refused | mod-temucraft-courier |
 | `reagentbag` | the reagent bag addon messages (prefix `TPG`): RG, RT, RD, RW, RA and the ER refusal, checked in the answer, the bags and `mod_temucraft_reagent_bag` | mod-temucraft-professions |
 | `auras` | the cosmetic aura toys: on, saved, back after a relog and after death, one at a time, off and forgotten | mod-temucraft-auras (in mod-temucraft-courier) |
@@ -19,7 +19,13 @@ bots in to a running Temucraft worldserver and check what the modules do through
 | `pools` | pooled gathering nodes (gameobject types 3 and 25) of two always-on pools on maps 0/1 are live where the pool puts them (core 9e482708e, Map::InitPools after PoolMgr::LoadFromDB) | core |
 | `firstmount` | quests 602140-602159 each allow exactly one race (and the race of `temucraft_first_mount_race`); Kar Stormsinger offers a Tauren the Tauren quest and none of 602140-602159 | mod-temucraft-first-mount |
 | `classes` | no `conditions` row ties Parachute (55001) to Engineering, and a level 10 character without it casts 55001; a Tauren logging in twice more is neither taught nor stripped of Earthmother's Embrace (100176) | mod-temucraft-classes |
-| `merchants` | a Sealed Apprentice Crate turned in (quest 602010) is taken and gives Merchant's Favor (601700) and reputation with 2233 or 2234; no two `currencytypes_dbc` rows share a BitIndex and the Favor's is 1-64 | mod-temucraft-merchants |
+| `merchants` | quest 602010 in the log, then a Sealed Apprentice Crate: the quest is complete; turned in, the crate is taken and gives Merchant's Favor (601700) and reputation with 2233 or 2234; no two `currencytypes_dbc` rows share a BitIndex and the Favor's is 1-64 | mod-temucraft-merchants |
+| `startzone` | a new character is asked for its starting zone once: the gossip menu without a TSZ HELLO (staying is a choice), the TSZ window with one (a pick teleports, "DONE"), and after a relog neither comes again | mod-temucraft-starting-zone |
+| `races` | character create for races 1-30 x classes 1-9, 11 (a sample of 30 by default, all 300 with `E2E_RACES_FULL=1` or `E2E_TAGS=full`): created, on playercreateinfo's map (death knights in Acherus), gear on; races 13, 15, 16, 19, 20, 21, 24, 27, 28 know their racial spells (`testdata/racials.tsv`) | core, mod-temucraft-classes, SkillRaceClassInfo |
+| `parachute` | Parachute (55001) on the ground: ready aura, cooldown cleared, no slow fall, a second press works; falling: it opens (SMSG_MOVE_FEATHER_FALL), the cooldown starts (SMSG_SPELL_COOLDOWN) and a press is refused | mod-temucraft-classes |
+| `checkpoints` | Shadowfang Keep: a fresh run has only the always-awake checkpoints awake, the first boss's stone can't be seen before it wakes and shows once it does, and a new run (unbind, enter again) has nothing of the old one awake | mod-temucraft-checkpoints |
+| `rbac` | database only: the db-auth files of mod-temucraft-player-settings and mod-temucraft-courier (auras, courier) run twice keep role 1000's links to their permissions and have their own links | mod-temucraft-player-settings, -courier |
+| `shutdown` | **exclusive realm**: `.server shutdown` with bots online: "Saved N players before the bots log out" (N >= 1) in Playerbots.log, no crash file | core, mod-playerbots |
 
 `tcwire` holds the shared helpers: a reader for system messages, notifications and addon whispers
 (`SMSG_MESSAGECHAT`, `SMSG_NOTIFICATION`), gossip (`CMSG_GOSSIP_HELLO` / `SELECT_OPTION`, `SMSG_GOSSIP_MESSAGE`),
@@ -60,7 +66,32 @@ go test -tags=e2e ./suites/temucraft/hearthstone -run TestHearthstone_InnkeeperG
 
 Keep `-p 1`: each folder takes its own isolation pad, and two packages at once can share one.
 
+Today's regression set (2026-11-26) is `make e2e-temucraft-today` (channels, auras, reagentbag, shop, hearthstone,
+merchants, startzone, races, parachute, checkpoints, rbac); `make e2e-temucraft-shutdown` stops the worldserver.
+
 ## Notes
+
+- 2026-11-26 PTR run, the six failures and what changed:
+  - `channels`, `reagentbag`: test bugs in `tcwire`. A harness bot is GM level 3, which has the GM chat permission
+    (372), so the server sends every chat line the bot is the sender of as SMSG_GM_MESSAGECHAT (0x3B3, with the
+    sender's name before the channel / receiver), and the readers only took SMSG_MESSAGECHAT: the bot's own channel
+    line and every TPG reply (whispered from the player to itself) were dropped. Both opcodes are read now.
+    `ChannelSay` also sent LANG_UNIVERSAL, which the server refuses from a client (only a notification comes back);
+    it speaks the character's language now (`NativeLang`). The core channel code (incl. 7ffa9e215) was not at fault.
+  - `auras`: the test now checks permission 103650 and its links in the auth database first and prints the system
+    messages, notifications and equip error it got; mod-temucraft-courier's two db-auth files no longer delete every
+    link to their range on a re-run (the player-settings pattern), which dropped other roles' links (role 1000).
+  - `shop`: 11 categories now (Toys, Auras, Helpers), checked by name and order against CategoryNames.
+  - `hearthstone`: the Trick or Treat innkeeper is also found through timed action lists, and when there is none any
+    plain innkeeper is used (the item index / menu id checks are the oracle then) instead of failing.
+  - `merchants`: `.quest add` first, then the crate (the accept packet with the crate in the bags left status NONE).
+- `rbac` writes to the auth database: it runs only when its name contains "e2e" (the isolated `acore_auth_e2e`), never on
+  the shared one; it finds the SQL files from `e2e/suites/temucraft/rbac` (or `E2E_SOURCE_DIR`).
+- `races` makes one account per race (TCR<race><hex>) and deletes its characters at the end; the accounts stay.
+  A death knight that needs a level 55 character on the account gets one (an earlier character set to 55 in the DB).
+- `shutdown` runs only with `E2E_SHUTDOWN_OK=1` and `E2E_PLAYERBOTS_LOG`; start the worldserver again after it.
+- `startzone`, `races`, `parachute`, `checkpoints`, `rbac` and `shutdown` (added 2026-11-26) were checked with
+  `go vet -tags=e2e` and `go test -tags=e2e -c` only.
 
 - `TestTemucraft_CommandDeniedByRBAC` writes a deny row for permission 103350 to `rbac_account_permissions` of the
   test account and deletes it at the end. If a run is killed in the middle, delete that row by hand.

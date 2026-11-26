@@ -14,7 +14,7 @@ COUNT    ?= 1
 
 GOTEST = $(GO) test -tags=$(TAGS) -count=$(COUNT) -timeout $(TIMEOUT) -p $(P)
 
-.PHONY: e2e-smoke e2e-category e2e-sub e2e-issue e2e-tags e2e-full e2e-list e2e-local e2e-mod
+.PHONY: e2e-smoke e2e-category e2e-sub e2e-issue e2e-tags e2e-full e2e-list e2e-local e2e-mod e2e-temucraft-today e2e-temucraft-shutdown
 
 e2e-mod:
 	$(GO) mod tidy
@@ -52,3 +52,15 @@ e2e-local:
 e2e-full: TIMEOUT = 120m
 e2e-full:
 	$(GOTEST) -v -parallel $(PARALLEL) ./...
+
+# Temucraft: the regression set of 2026-11-26 (the six suites that failed on the PTR, and the suites added for that
+# day's fixes). Not shutdown: it stops the worldserver (make e2e-temucraft-shutdown, on an exclusive realm).
+TEMUCRAFT_TODAY = channels auras reagentbag shop hearthstone merchants startzone races parachute checkpoints rbac
+e2e-temucraft-today: TIMEOUT = 90m
+e2e-temucraft-today:
+	$(GOTEST) -v -parallel 1 $(addprefix ./suites/temucraft/,$(TEMUCRAFT_TODAY))
+
+# Stops the worldserver. Needs E2E_PLAYERBOTS_LOG (and E2E_CRASH_DIR for the crash dump check).
+e2e-temucraft-shutdown: TIMEOUT = 15m
+e2e-temucraft-shutdown:
+	E2E_SHUTDOWN_OK=1 $(GOTEST) -v -parallel 1 ./suites/temucraft/shutdown

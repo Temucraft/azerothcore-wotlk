@@ -3,6 +3,7 @@
 package shop_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -16,12 +17,17 @@ import (
 const (
 	curatorEntry uint32 = 608000 // npc_temucraft_shop_curator
 	tokenItem    uint32 = 608000 // Temucraft Token (Temucraft.Shop.TokenItem)
-	categories          = 8
 )
 
-// The Temucraft Curator's gossip: eight "Browse:" categories that open a vendor window, "How do I earn tokens?"
-// that tells the balance, and (when the server sells tokens for gold) a gold for token trade that really moves the
-// gold and the token. `.temucraft shop summon` brings the curator to the bot, so no world spawn is needed.
+// The curator's categories, in menu order: CategoryNames in mod-temucraft-shop's src/TemucraftShop.cpp (they are in the
+// code, not in the database or the config). Toys, Auras and Helpers came with mod_temucraft_shop_more.sql; the test
+// used to count 8. Keep this list the same as CategoryNames.
+var categories = []string{"Miscellaneous", "Skins", "Gameplay", "Glyphs", "Mounts", "Companions", "Fashion", "Illusions", "Toys", "Auras", "Helpers"}
+
+// The Temucraft Curator's gossip: one "Browse: <category>" line for each category above, in that order, each opening
+// a vendor window; "How do I earn tokens?" that tells the balance, and (when the server sells tokens for gold) a gold
+// for token trade that really moves the gold and the token. `.temucraft shop summon` brings the curator to the bot,
+// so no world spawn is needed.
 func TestShop_CuratorGossip(t *testing.T) {
 	meta.Begin(t, meta.TestMeta{Tags: []string{"med", "temucraft", "shop", "gossip"}, Runtime: "med", Category: "temucraft/shop"})
 
@@ -34,8 +40,18 @@ func TestShop_CuratorGossip(t *testing.T) {
 
 	menu := tcwire.GossipHello(t, bot.World, curator)
 	t.Logf("curator menu %d: %q", menu.MenuID, menu.Texts())
-	if n := menu.Count("Browse:"); n != categories {
-		e2eharness.Assertf(t, "curator shows %d Browse: categories, want %d", n, categories)
+	var browse []tcwire.GossipOption
+	for _, o := range menu.Options {
+		if strings.HasPrefix(tcwire.Plain(o.Text), "Browse: ") {
+			browse = append(browse, o)
+		}
+	}
+	got := make([]string, 0, len(browse))
+	for _, o := range browse {
+		got = append(got, strings.TrimPrefix(tcwire.Plain(o.Text), "Browse: "))
+	}
+	if strings.Join(got, ",") != strings.Join(categories, ",") {
+		e2eharness.Assertf(t, "curator categories %q, want %q (CategoryNames in mod-temucraft-shop)", got, categories)
 	}
 	earn, ok := menu.Find("How do I earn tokens?")
 	if !ok {
@@ -51,20 +67,29 @@ func TestShop_CuratorGossip(t *testing.T) {
 		t.Logf("balance: %q", got)
 	}
 
-	// a category opens a vendor window with goods in it
-	menu = tcwire.GossipHello(t, bot.World, curator)
-	browse, _ := menu.Find("Browse:")
-	waitList, cancel := tcwire.ArmPacket(bot.World, tcwire.SmsgListInventory, tcwire.GUIDIs(curator))
-	tcwire.GossipSelect(t, bot.World, menu, browse)
-	list, ok := waitList(tcwire.DefaultReplyTimeout)
-	cancel()
-	if !ok {
-		e2eharness.Assertf(t, "%q: no vendor window (SMSG_LIST_INVENTORY)", browse.Text)
+	// every category opens a vendor window; the first one (Miscellaneous) has goods in it
+	for i, name := range categories {
+		menu = tcwire.GossipHello(t, bot.World, curator)
+		option, ok := menu.Find("Browse: " + name)
+		if !ok {
+			e2eharness.Assertf(t, "no \"Browse: %s\" line in %q", name, menu.Texts())
+		}
+		waitList, cancel := tcwire.ArmPacket(bot.World, tcwire.SmsgListInventory, tcwire.GUIDIs(curator))
+		tcwire.GossipSelect(t, bot.World, menu, option)
+		list, ok := waitList(tcwire.DefaultReplyTimeout)
+		cancel()
+		if !ok {
+			e2eharness.Assertf(t, "%q: no vendor window (SMSG_LIST_INVENTORY)", name)
+		}
+		goods := 0
+		if len(list) >= 9 {
+			goods = int(list[8])
+		}
+		if i == 0 && goods == 0 {
+			e2eharness.Assertf(t, "%q: the vendor window is empty", name)
+		}
+		t.Logf("%q: %d goods", name, goods)
 	}
-	if len(list) < 9 || list[8] == 0 {
-		e2eharness.Assertf(t, "%q: the vendor window is empty", browse.Text)
-	}
-	t.Logf("%q: %d goods", tcwire.Plain(browse.Text), list[8])
 
 	// gold for a token, when the server offers it
 	menu = tcwire.GossipHello(t, bot.World, curator)

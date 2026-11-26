@@ -211,6 +211,8 @@ suite; [`suites/temucraft/README.md`](suites/temucraft/README.md) has the realm 
 | `merchants` | a Sealed Crate turn-in gives Merchant's Favor and reputation; no two `currencytypes_dbc` rows share a bit |
 | `shop`, `courier`, `reagentbag`, `auras`, `challenges` | curator, courier, reagent bag addon, aura toys, Self-Found |
 | `reputation`, `invasion`, `channels` | reputation slots under 128, the invasion announcement, chat channel crash |
+| `startzone`, `races`, `parachute`, `checkpoints` | starting zone asked once (window and gossip), character create for every race and class, Parachute's two phases, dormant checkpoints hidden |
+| `rbac`, `shutdown` | module RBAC files re-run without dropping other roles' links (auth DB only); a clean stop with bots online (exclusive realm) |
 
 Run just them (from `e2e/`, `E2E_*` exported):
 
@@ -218,6 +220,14 @@ Run just them (from `e2e/`, `E2E_*` exported):
 go test -tags=e2e ./suites/temucraft/... -count=1 -v -timeout 60m -parallel 1 -p 1
 make e2e-category C=temucraft
 go test -tags=e2e ./suites/temucraft/debugcmds -count=1 -v -timeout 15m   # one suite
+```
+
+Today's regression set (2026-11-26: the six suites that failed on the PTR and the ones added for that day's fixes;
+not `shutdown`, which stops the worldserver):
+
+```bash
+make e2e-temucraft-today
+make e2e-temucraft-shutdown   # exclusive realm only; E2E_PLAYERBOTS_LOG=... [E2E_CRASH_DIR=...]
 ```
 
 ## Parallelism and isolation
