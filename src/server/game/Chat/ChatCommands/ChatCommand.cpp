@@ -91,7 +91,7 @@ static ChatSubCommandMap COMMAND_MAP;
             Field* fields = result->Fetch();
             std::string_view const name = fields[0].Get<std::string_view>();
             std::string_view const help = fields[2].Get<std::string_view>();
-            uint32 const secLevel = fields[1].Get<uint16>(); // Temucraft: smallint, so RBAC ids (200 and up, many above 255) fit
+            uint32 const secLevel = fields[1].Get<uint32>(); // Temucraft: int, so every RBAC id (200 and up, module ones above 100000) fits
 
             ChatCommandNode* cmd = nullptr;
             ChatSubCommandMap* map = &COMMAND_MAP;
